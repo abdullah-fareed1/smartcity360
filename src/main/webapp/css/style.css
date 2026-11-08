@@ -50,3 +50,7 @@ th, td { border: 1px solid #d9e2ec; padding: 8px; text-align: left; }
 
 .tree-box { background: #0f1b2d; color: #c7f9d4; font-family: "Courier New", monospace; font-size: 13px;
     line-height: 1.6; padding: 16px; border: 0; border-radius: 6px; max-height: 560px; overflow: auto; margin: 0; }
+
+.pill-unhandled { background: #ffe3e3; color: #c53030; padding: 1px 8px; border-radius: 10px; font-weight: bold; font-size: 10px; }
+.log-cell { background: #f8fafc; font-size: 12px; color: #52606d; padding: 4px 8px; }
+.log-line { padding: 1px 0; }
