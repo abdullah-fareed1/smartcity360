@@ -61,6 +61,11 @@
                         <td><fmt:formatNumber value="${result.plainPerLight}" pattern="#,##0"/></td>
                     </tr>
                 </table>
+                <p class="hint">
+                    Median of <c:out value="${result.runsUsed}"/> valid runs.
+                    Range with Flyweight: <c:out value="${result.flyRangeMb}"/>;
+                    without: <c:out value="${result.plainRangeMb}"/>.
+                </p>
                 <div class="result">
                     Memory saved: <strong><fmt:formatNumber value="${result.savedPercent}" pattern="0"/>%</strong>
                     (<fmt:formatNumber value="${result.plainMb - result.flyMb}" pattern="0.00"/> MB)
@@ -97,3 +102,4 @@
 </div>
 </body>
 </html>
+

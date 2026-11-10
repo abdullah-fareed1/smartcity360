@@ -5,6 +5,7 @@ import lk.urbantech.smartcity360.streetlights.pattern.LightTypeFactory;
 import lk.urbantech.smartcity360.streetlights.pattern.StreetLight;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -17,6 +18,7 @@ import java.util.Map;
 public class StreetLightService {
 
     private static final int MAX_COUNT = 200_000;
+    private static final int RUNS = 5;               // each measurement is repeated, then the median is used
 
     private static final String[] MODELS = {"LED-Pro-100", "LED-Eco-60", "Sodium-150"};
     private static final int[] WATTS = {100, 60, 150};
@@ -57,13 +59,30 @@ public class StreetLightService {
 
     // ---------- benchmark ----------
 
-    /** synchronized so two users cannot distort each other's measurement. */
+    /**
+     * synchronized so two users cannot distort each other's measurement.
+     * Memory readings from the JVM are noisy (garbage collection can run at any moment), so the
+     * measurement is repeated RUNS times, impossible readings are thrown away, and the MEDIAN is reported.
+     */
     public synchronized Map<String, Object> runBenchmark(String countText) {
         int count = parseCount(countText);
 
-        long flyBytes = measureWithFlyweight(count);
-        int poolSize = LightTypeFactory.getPoolSize();
-        long plainBytes = measureWithoutFlyweight(count);
+        List<Long> flyReadings = new ArrayList<>();
+        List<Long> plainReadings = new ArrayList<>();
+        int poolSize = 0;
+        for (int i = 0; i < RUNS; i++) {
+            long fly = measureWithFlyweight(count);
+            poolSize = LightTypeFactory.getPoolSize();
+            long plain = measureWithoutFlyweight(count);
+            if (fly > 0) flyReadings.add(fly);          // a reading <= 0 means GC ran during measuring
+            if (plain > 0) plainReadings.add(plain);
+        }
+        if (flyReadings.isEmpty() || plainReadings.isEmpty()) {
+            throw new IllegalArgumentException("The memory readings were unstable on this JVM. Please run the benchmark again.");
+        }
+
+        long flyBytes = median(flyReadings);
+        long plainBytes = median(plainReadings);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("count", count);
@@ -72,8 +91,23 @@ public class StreetLightService {
         result.put("plainMb", plainBytes / (1024.0 * 1024.0));
         result.put("flyPerLight", flyBytes / count);
         result.put("plainPerLight", plainBytes / count);
-        result.put("savedPercent", plainBytes == 0 ? 0.0 : (plainBytes - flyBytes) * 100.0 / plainBytes);
+        result.put("savedPercent", (plainBytes - flyBytes) * 100.0 / plainBytes);
+        result.put("runsUsed", Math.min(flyReadings.size(), plainReadings.size()) + " of " + RUNS);
+        result.put("flyRangeMb", range(flyReadings));
+        result.put("plainRangeMb", range(plainReadings));
         return result;
+    }
+
+    private long median(List<Long> readings) {
+        List<Long> sorted = new ArrayList<>(readings);
+        Collections.sort(sorted);
+        return sorted.get(sorted.size() / 2);
+    }
+
+    private String range(List<Long> readings) {
+        long min = Collections.min(readings);
+        long max = Collections.max(readings);
+        return String.format(Locale.ROOT, "%.2f to %.2f MB", min / (1024.0 * 1024.0), max / (1024.0 * 1024.0));
     }
 
     private long measureWithFlyweight(int count) {
@@ -84,7 +118,7 @@ public class StreetLightService {
         if (lights.size() != count) {             // also keeps the list reachable until here
             throw new IllegalStateException("Unexpected light count");
         }
-        return Math.max(0, after - before);
+        return after - before;      // may be <= 0 if GC ran: runBenchmark discards those
     }
 
     private long measureWithoutFlyweight(int count) {
@@ -94,7 +128,7 @@ public class StreetLightService {
         if (lights.size() != count) {
             throw new IllegalStateException("Unexpected light count");
         }
-        return Math.max(0, after - before);
+        return after - before;      // may be <= 0 if GC ran: runBenchmark discards those
     }
 
     // ---------- helpers ----------
